@@ -1,15 +1,23 @@
 <script lang="ts">
 import { ref, type Ref } from 'vue'
 import CardSeries from '../components/CardSeries.vue'
-import { mapActions } from 'pinia'
+import { mapActions, mapState } from 'pinia'
 import { useGlobalStore } from '../stores/store'
-
+import LoaderComponent from '@/components/LoaderComponent.vue'
+import ErrorComponent from '@/components/ErrorComponent.vue'
+const baseUrlApi = import.meta.env.VITE_API_BASE_URL
+const apiKey = import.meta.env.VITE_MARVEL_API_KEY
 export default {
   components: {
-    CardSeries
+    CardSeries,
+    LoaderComponent,
+    ErrorComponent
   },
   created() {
     window.addEventListener('scroll', this.handleScroll)
+  },
+  computed: {
+    ...mapState(useGlobalStore, ['getViewSeries'])
   },
   setup() {
     const series: Ref<any[]> = ref([])
@@ -17,12 +25,16 @@ export default {
     const seriesSize: Ref<number> = ref(20)
     const currentPage: Ref<number> = ref(0)
     const isLoading: Ref<boolean> = ref(false)
+    const isError: Ref<boolean> = ref(false)
+    const isNoData: Ref<boolean> = ref(false)
     return {
       series,
       seriesLimit,
       seriesSize,
       currentPage,
-      isLoading
+      isLoading,
+      isError,
+      isNoData
     }
   },
 
@@ -37,23 +49,20 @@ export default {
     ...mapActions(useGlobalStore, ['addViewSerie']),
     getSeriesWithPagination(currentPage: number, size: number): void {
       this.isLoading = true
-      fetch(
-        `https://gateway.marvel.com:443/v1/public/series?limit=${size}&offset=${currentPage}&apikey=e6a1258526d5fac0f4db3be7ad946698`
-      )
+      fetch(`${baseUrlApi}/series?limit=${size}&offset=${currentPage}&apikey=${apiKey}`)
         .then((response) => response.json())
         .then((data) => {
-          const responseFormated = data.data.results.map((result: any) => {
-            return {
-              id: result.id,
-              title: result.title,
-              type: result.type,
-              ages: result.endYear - result.startYear,
-              img: `${result.thumbnail.path}.${result.thumbnail.extension}`,
-              resourcesRelatedNumber: this.getResourcesRelatedNumber(result)
-            }
-          })
-          this.series = this.series.concat(responseFormated)
+          if (data.code === 200 && data.data.results?.length) {
+            this.series = this.series.concat(data.data.results)
+          } else {
+            this.series = []
+            this.isNoData = true
+          }
           this.isLoading = false
+        })
+        .catch((error) => {
+          this.isLoading = false
+          this.isError = true
         })
     },
     getResourcesRelatedNumber(data: any): string {
@@ -83,7 +92,10 @@ export default {
       }
     },
     goToDetail(serie: any) {
-      this.addViewSerie(serie)
+      const findSerie = this.getViewSeries.find((saveSerie) => saveSerie.id === serie.id)
+      if (!findSerie) {
+        this.addViewSerie(serie)
+      }
       this.$router.push(`/detail/${serie.id}`)
     }
   }
@@ -91,20 +103,29 @@ export default {
 </script>
 
 <template>
+  <h1 v-if="!isLoading" style="text-align: center">Home View</h1>
   <div class="row">
     <div v-for="serie in series" :key="serie.id" class="column" style="">
       <CardSeries
         :title="serie.title"
         :type="serie.type"
-        :ages="serie.ages"
-        :img="serie.img"
-        :resourcesRelatedNumber="serie.resourcesRelatedNumber"
+        :ages="serie.endYear - serie.startYear"
+        :img="`${serie.thumbnail?.path}.${serie.thumbnail?.extension}`"
+        :resourcesRelatedNumber="getResourcesRelatedNumber(serie)"
         @click="goToDetail(serie)"
         style="cursor: pointer"
       ></CardSeries>
     </div>
   </div>
-  <div v-if="isLoading">Cargando...</div>
+  <div v-if="isLoading">
+    <LoaderComponent></LoaderComponent>
+  </div>
+  <ErrorComponent
+    v-if="isError"
+    type="Danger"
+    message="Ups! Have one error with the call service, reload the app"
+  ></ErrorComponent>
+  <ErrorComponent v-if="isNoData" type="Alert" message="Info! Dont have data"></ErrorComponent>
 </template>
 
 <style lang="scss">
@@ -112,7 +133,6 @@ export default {
   box-sizing: border-box;
 }
 
-/* Create four equal columns that floats next to each other */
 .column {
   min-height: 55vh;
   width: calc((100% / 3) - 16px);
@@ -125,16 +145,15 @@ export default {
 .row {
   display: flex;
   flex-wrap: wrap;
+  margin-bottom: 3rem;
 }
 
-/* Clear floats after the columns */
 .row:after {
   content: '';
   display: table;
   clear: both;
 }
 
-/* Responsive layout - makes the four columns stack on top of each other instead of next to each other */
 @media screen and (max-width: 700px) {
   .column {
     width: 100%;

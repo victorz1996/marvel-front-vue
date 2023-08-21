@@ -4,7 +4,8 @@ import TabComponent from '../components/TabComponent.vue'
 import ToggleComponent from '../components/ToggleComponent.vue'
 import { mapActions, mapState } from 'pinia'
 import { useGlobalStore } from '../stores/store'
-
+const baseUrlApi = import.meta.env.VITE_API_BASE_URL
+const apiKey = import.meta.env.VITE_MARVEL_API_KEY
 export default {
   components: {
     TabComponent,
@@ -35,9 +36,7 @@ export default {
     ...mapActions(useGlobalStore, ['addSavedSerie', 'removeSavedSerie']),
     getSerieByid(idSerie: any): void {
       this.isLoading = true
-      fetch(
-        `https://gateway.marvel.com:443/v1/public/series/${idSerie}?apikey=e6a1258526d5fac0f4db3be7ad946698`
-      )
+      fetch(`${baseUrlApi}/series/${idSerie}?apikey=${apiKey}`)
         .then((response) => response.json())
         .then((data) => {
           const result = data.data.results[0]
@@ -78,7 +77,7 @@ export default {
     getResourcesBySerieIdAndResourceName(serieId: string, resourceName: string) {
       this.activeResource = resourceName
       fetch(
-        `https://gateway.marvel.com:443/v1/public/series/${serieId}/${resourceName.toLowerCase()}?apikey=e6a1258526d5fac0f4db3be7ad946698`
+        `${baseUrlApi}/series/${serieId}/${resourceName.toLowerCase()}?apikey=${apiKey}`
       )
         .then((response) => response.json())
         .then((data) => {
@@ -87,7 +86,15 @@ export default {
     },
     saveSerie(event: boolean) {
       if (event) {
-        this.addSavedSerie(this.serie)
+        if (this.getSavedSeries.length < 10) {
+          this.addSavedSerie(this.serie)
+        } else {
+          this.serie.isSaved = null
+          setTimeout(() => {
+            this.serie.isSaved = false
+          }, 0)
+          alert('Ya tiene 10 guardados')
+        }
       } else this.removeSavedSerie(this.serie.id)
     }
   }
@@ -108,7 +115,11 @@ export default {
       </div>
       <div style="margin-top: 1rem; margin-right: 1rem">
         <h3>Saved</h3>
-        <ToggleComponent @changeValue="saveSerie" :active-value="serie.isSaved"></ToggleComponent>
+        <ToggleComponent
+          v-if="serie.isSaved !== null"
+          @changeValue="saveSerie"
+          :active-value="serie.isSaved"
+        ></ToggleComponent>
       </div>
     </div>
     <div class="tabs">
