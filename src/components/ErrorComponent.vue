@@ -1,24 +1,27 @@
 <script lang="ts">
-import type { PropType } from 'vue'
+import type { PropType } from "vue";
 
 export default {
   props: {
     type: String as PropType<string>,
-    message: String as PropType<string>
+    message: String as PropType<string>,
   },
   computed: {
     getAlertColor(): string {
-      if (this.type === 'Danger') return '#f44336'
-      if (this.type === 'Success') return '#04AA6D'
-      if (this.type === 'Alert') return '#ff9800'
-      return 'red'
-    }
-  }
-}
+      if (this.type === "Danger") return "#f44336";
+      if (this.type === "Success") return "#04AA6D";
+      if (this.type === "Alert") return "#ff9800";
+      if (this.type === "Info") return "#2196F3";
+      return "gray";
+    },
+  },
+};
 </script>
 <template>
   <div :style="{ backgroundColor: getAlertColor }" class="alert">
-    <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+    <span class="closebtn" onclick="this.parentElement.style.display='none';"
+      >&times;</span
+    >
     <strong>{{ type }}!</strong> {{ message }}
   </div>
 </template>

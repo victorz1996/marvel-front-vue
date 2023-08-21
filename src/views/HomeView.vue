@@ -1,12 +1,16 @@
 <script lang="ts">
 import { ref, type Ref } from 'vue'
-import CardSeries from '../components/CardSeries.vue'
+import CardSeries from '@/components/CardSeries.vue'
 import { mapActions, mapState } from 'pinia'
 import { useGlobalStore } from '../stores/store'
 import LoaderComponent from '@/components/LoaderComponent.vue'
 import ErrorComponent from '@/components/ErrorComponent.vue'
-const baseUrlApi = import.meta.env.VITE_API_BASE_URL
-const apiKey = import.meta.env.VITE_MARVEL_API_KEY
+import type { Serie } from '@/core/domain/Serie'
+import { container } from '@/core/infrastructure/Container'
+import type { ListSeries } from '@/core/application/listSeries/ListSeries'
+import { SYMBOLS_SERIES } from '@/core/infrastructure/Types'
+import type { ResponseEntity } from '@/core/domain/ResponseEntity'
+
 export default {
   components: {
     CardSeries,
@@ -20,7 +24,7 @@ export default {
     ...mapState(useGlobalStore, ['getViewSeries'])
   },
   setup() {
-    const series: Ref<any[]> = ref([])
+    const series: Ref<Serie[]> = ref([])
     const seriesLimit: Ref<number> = ref(0)
     const seriesSize: Ref<number> = ref(20)
     const currentPage: Ref<number> = ref(0)
@@ -38,8 +42,8 @@ export default {
     }
   },
 
-  mounted() {
-    this.getSeriesWithPagination(this.currentPage, this.seriesSize)
+  async mounted() {
+    await this.getSeriesWithPagination(this.currentPage, this.seriesSize)
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleScroll)
@@ -47,25 +51,20 @@ export default {
 
   methods: {
     ...mapActions(useGlobalStore, ['addViewSerie']),
-    getSeriesWithPagination(currentPage: number, size: number): void {
+    async getSeriesWithPagination(currentPage: number, size: number): Promise<void> {
       this.isLoading = true
-      fetch(`${baseUrlApi}/series?limit=${size}&offset=${currentPage}&apikey=${apiKey}`)
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.code === 200 && data.data.results?.length) {
-            this.series = this.series.concat(data.data.results)
-          } else {
-            this.series = []
-            this.isNoData = true
-          }
-          this.isLoading = false
-        })
-        .catch((error) => {
-          this.isLoading = false
-          this.isError = true
-        })
+      const response: ResponseEntity = await container
+        .get<ListSeries>(SYMBOLS_SERIES.LIST_SERIES)
+        .execute(size.toString(), currentPage.toString())
+      if (response.code === 200 && response.data.length) {
+        this.series = this.series.concat(response.data)
+      } else {
+        this.series = []
+        this.isError = true
+      }
+      this.isLoading = false
     },
-    getResourcesRelatedNumber(data: any): string {
+    getResourcesRelatedNumber(data: Serie): string {
       let stringToReturn = ''
       if (data.characters?.available) {
         stringToReturn = stringToReturn + `${data.characters?.available} Characters, `
@@ -91,7 +90,7 @@ export default {
         this.getSeriesWithPagination(this.currentPage, this.seriesSize)
       }
     },
-    goToDetail(serie: any) {
+    goToDetail(serie: Serie) {
       const findSerie = this.getViewSeries.find((saveSerie) => saveSerie.id === serie.id)
       if (!findSerie) {
         this.addViewSerie(serie)

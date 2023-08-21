@@ -2,52 +2,93 @@
 import { type Ref, ref } from 'vue'
 import TabComponent from '../components/TabComponent.vue'
 import ToggleComponent from '../components/ToggleComponent.vue'
+import ErrorComponent from '@/components/ErrorComponent.vue'
 import { mapActions, mapState } from 'pinia'
 import { useGlobalStore } from '../stores/store'
-const baseUrlApi = import.meta.env.VITE_API_BASE_URL
-const apiKey = import.meta.env.VITE_MARVEL_API_KEY
+import LoaderComponent from '@/components/LoaderComponent.vue'
+import type { Serie } from '@/core/domain/Serie'
+import type { ResponseEntity } from '@/core/domain/ResponseEntity'
+import { container } from '@/core/infrastructure/Container'
+import { SYMBOLS_SERIES } from '@/core/infrastructure/Types'
+import type { ListResources } from '@/core/application/listResources/ListResources'
+import type { ListSerieById } from '@/core/application/listSerieById/ListSerieById'
+import type { MessageAlert } from '@/core/domain/MessageAlert'
+const newSerie: Serie = {
+  id: '',
+  endYear: 0,
+  modified: '',
+  rating: '',
+  startYear: 0,
+  title: '',
+  type: '',
+  characters: null,
+  comics: null,
+  creators: null,
+  events: null,
+  stories: null,
+  thumbnail: {
+    path: '',
+    extension: ''
+  },
+  urls: null,
+  isSaved: null
+}
 export default {
   components: {
     TabComponent,
-    ToggleComponent
+    ToggleComponent,
+    ErrorComponent,
+    LoaderComponent
   },
 
   computed: {
     ...mapState(useGlobalStore, ['getSavedSeries'])
   },
   setup() {
-    const serie: Ref<any> = ref(null)
+    const serie: Ref<Serie> = ref(newSerie)
     const detailResourcesList: Ref<any[]> = ref([])
     const isLoading: Ref<boolean> = ref(false)
+    const isError: Ref<boolean> = ref(false)
+    const isLoadingResources: Ref<boolean> = ref(false)
+    const isErrorResources: Ref<boolean> = ref(false)
+    const actionMessageExecuter: Ref<boolean> = ref(false)
+    const objectMessageAction: Ref<MessageAlert> = ref({ type: '', message: '' })
     const activeResource: Ref<string> = ref('')
 
     return {
       serie,
       detailResourcesList,
       isLoading,
+      isError,
+      isLoadingResources,
+      isErrorResources,
+      actionMessageExecuter,
+      objectMessageAction,
       activeResource
     }
   },
-  mounted() {
-    this.getSerieByid(this.$route.params.id)
+  async mounted() {
+    await this.getSerieByid(this.$route.params.id as string)
   },
 
   methods: {
     ...mapActions(useGlobalStore, ['addSavedSerie', 'removeSavedSerie']),
-    getSerieByid(idSerie: any): void {
+    async getSerieByid(idSerie: string): Promise<void> {
       this.isLoading = true
-      fetch(`${baseUrlApi}/series/${idSerie}?apikey=${apiKey}`)
-        .then((response) => response.json())
-        .then((data) => {
-          const result = data.data.results[0]
-          this.serie = {
-            ...result,
-            ages: result.endYear - result.startYear,
-            img: `${result.thumbnail.path}.${result.thumbnail.extension}`,
-            isSaved: this.getIsSaveSerie(result.id)
-          }
-          this.isLoading = false
-        })
+      const response: ResponseEntity = await container
+        .get<ListSerieById>(SYMBOLS_SERIES.LIST_SERIE_BY_ID)
+        .execute(idSerie)
+      if (response.code === 200) {
+        const result = response.data
+        this.serie = {
+          ...result,
+          isSaved: this.getIsSaveSerie(result.id)
+        }
+      } else {
+        this.serie = newSerie
+        this.isError = true
+      }
+      this.isLoading = false
     },
     getIsSaveSerie(serieId: string) {
       if (this.getSavedSeries.length) {
@@ -55,7 +96,7 @@ export default {
       }
       return false
     },
-    buildDataToTabs(serie: any): any[] {
+    buildDataToTabs(serie: Serie): any[] {
       let arrayToReturn = []
       if (serie.characters?.available) {
         arrayToReturn.push({ ...serie.characters, name: 'Characters' })
@@ -74,36 +115,63 @@ export default {
       }
       return arrayToReturn
     },
-    getResourcesBySerieIdAndResourceName(serieId: string, resourceName: string) {
+    async getResourcesBySerieIdAndResourceName(
+      serieId: string,
+      resourceName: string
+    ): Promise<void> {
+      this.isLoadingResources = true
       this.activeResource = resourceName
-      fetch(
-        `${baseUrlApi}/series/${serieId}/${resourceName.toLowerCase()}?apikey=${apiKey}`
-      )
-        .then((response) => response.json())
-        .then((data) => {
-          this.detailResourcesList = data.data.results
-        })
+      const response: ResponseEntity = await container
+        .get<ListResources>(SYMBOLS_SERIES.LIST_RESOURCES_BY_SERIE_ID_AND_RESOURCE_NAME)
+        .execute(serieId, resourceName)
+      if (response.code === 200 && response.data.length) {
+        this.detailResourcesList = response.data
+      } else {
+        this.detailResourcesList = []
+        this.isErrorResources = true
+      }
+      this.isLoadingResources = false
     },
     saveSerie(event: boolean) {
       if (event) {
         if (this.getSavedSeries.length < 10) {
           this.addSavedSerie(this.serie)
+          this.showActionMessage(
+            'Success',
+            'the Item was saved succesfully, go to the saved item into history view'
+          )
         } else {
           this.serie.isSaved = null
           setTimeout(() => {
             this.serie.isSaved = false
           }, 0)
-          alert('Ya tiene 10 guardados')
+          this.showActionMessage('Alert', 'You most the most saved items(10)')
         }
       } else this.removeSavedSerie(this.serie.id)
+    },
+    showActionMessage(type: string, message: string): void {
+      this.actionMessageExecuter = true
+      this.objectMessageAction = {
+        type,
+        message
+      }
+      setTimeout(() => {
+        this.actionMessageExecuter = false
+      }, 2000)
     }
   }
 }
 </script>
 <template>
+  <ErrorComponent
+    v-if="actionMessageExecuter"
+    :type="objectMessageAction.type"
+    :message="objectMessageAction.message"
+  ></ErrorComponent>
+  <h1 v-if="!isLoading" style="text-align: center">Detail View</h1>
   <div v-if="serie" class="detail-container">
     <div class="detail-top">
-      <img height="300" :src="serie.img" alt="" />
+      <img height="300" :src="`${serie.thumbnail.path}.${serie.thumbnail.extension}`" alt="" />
       <div style="margin-left: 5rem; flex-basis: 100%">
         <h4>Title: {{ serie.title }}</h4>
         <p>Description: {{ serie.description || 'n/a' }}</p>
@@ -122,13 +190,13 @@ export default {
         ></ToggleComponent>
       </div>
     </div>
-    <div class="tabs">
+    <div style="margin-top: 1rem">
       <TabComponent
         v-if="buildDataToTabs(serie).length"
         @changeTab="getResourcesBySerieIdAndResourceName(serie.id, $event)"
         :data-to-tabs="buildDataToTabs(serie)"
       >
-        <div>
+        <div v-if="!isLoadingResources">
           <div
             style="display: flex; margin-top: 1rem"
             v-for="resource of detailResourcesList"
@@ -154,16 +222,33 @@ export default {
               <p v-if="activeResource === 'Stories'">Type: {{ resource.type }}</p>
             </div>
           </div>
-        </div></TabComponent
-      >
-      <div v-else>Not found resources</div>
+        </div>
+        <LoaderComponent v-if="isLoadingResources"></LoaderComponent>
+        <ErrorComponent
+          v-if="isErrorResources && !isLoadingResources"
+          type="Danger"
+          message="Api Failed"
+        ></ErrorComponent>
+      </TabComponent>
+      <div v-else>
+        <ErrorComponent type="Alert" message="No have resources"></ErrorComponent>
+      </div>
     </div>
   </div>
-  <div v-else>Loading ...</div>
+  <div v-if="isLoading">
+    <LoaderComponent></LoaderComponent>
+  </div>
+  <ErrorComponent
+    style="margin-top: 3rem"
+    v-if="isError && !isLoading"
+    type="Danger"
+    message="Have Error, reolad page"
+  ></ErrorComponent>
 </template>
 
 <style scoped lang="scss">
 .detail-container {
+  margin-top: 3rem;
   .detail-top {
     display: flex;
   }

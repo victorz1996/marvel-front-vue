@@ -1,25 +1,26 @@
+import type { Serie } from '@/core/domain/Serie'
 import { defineStore } from 'pinia'
 
 export const useGlobalStore = defineStore('globalStore', {
   state: () => {
     return {
-      viewSeries: [] as any[],
-      savedSeries: [] as any[]
+      viewSeries: [] as Serie[],
+      savedSeries: [] as Serie[]
     }
   },
   getters: {
-    getViewSeries(state): any[] {
+    getViewSeries(state): Serie[] {
       return state.viewSeries
     },
-    getSavedSeries(state): any[] {
+    getSavedSeries(state): Serie[] {
       return state.savedSeries
     }
   },
   actions: {
-    addViewSerie(serie: any) {
+    addViewSerie(serie: Serie) {
       this.viewSeries.push(serie)
     },
-    addSavedSerie(serie: any) {
+    addSavedSerie(serie: Serie) {
       this.savedSeries.push(serie)
     },
     removeSavedSerie(serieId: string) {

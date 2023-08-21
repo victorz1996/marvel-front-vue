@@ -18,7 +18,7 @@ export default {
     }
   },
   methods: {
-    openTab(evt: any, tabName: any) {
+    openTab(evt: any, tabName: string) {
       let i, tabcontent: any, tablinks
 
       tabcontent = document.getElementsByClassName('tabcontent')
